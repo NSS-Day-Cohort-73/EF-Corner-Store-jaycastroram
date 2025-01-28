@@ -32,135 +32,220 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 
-// Cashier Endpoints
+// Cashier Endpoints, these are the endpoints for the cashier model and its related data 
 app.MapGet("/cashiers/{id}", async (CornerStoreDbContext db, int id) =>
 {
-    var cashier = await db.Cashiers
+    // Get cashier with all related data, the ? operator is used to return null if the cashier doesn't exist 
+    // the include method is used to include the related data in the query in this case we are including the orders and the order products
+    Cashier? cashier = await db.Cashiers
         .Include(c => c.Orders)
             .ThenInclude(o => o.OrderProducts)
                 .ThenInclude(op => op.Product)
+                // the FirstOrDefaultAsync method is used to return the first cashier that matches the id
         .FirstOrDefaultAsync(c => c.Id == id);
 
+    // Return NotFound if cashier doesn't exist
     if (cashier == null)
     {
+        // Return the status code 404 if the cashier doesn't exist
         return Results.NotFound();
     }
-
+    // Return the cashier with all its related data that we included in the query and the status code 200
     return Results.Ok(cashier);
 });
-
+// Create a new cashier using the POST method using the Cashier model as the request body and db as the database context
+// The Cashier model is the data that we are sending to the endpoint and the db is the database context that we are using to save the data 
 app.MapPost("/cashiers", async (CornerStoreDbContext db, Cashier cashier) =>
 {
+    // Add new cashier
     db.Cashiers.Add(cashier);
+    // Save the changes to the database using the async method
+    // The await keyword is used to wait for the SaveChangesAsync method to complete before returning the results
     await db.SaveChangesAsync();
+    // The Created method is used to return the created cashier with the status code 201
+    // The Results.Created method takes two arguments, the first is the URL of the created cashier and the second is the data that we are sending to the endpoint
     return Results.Created($"/cashiers/{cashier.Id}", cashier);
 });
 
-// Product Endpoints
-app.MapGet("/products", async (CornerStoreDbContext db, string? search) =>
+// Product Endpoints, these are the endpoints for the product model and its related data    
+app.MapGet("/products", async (CornerStoreDbContext db) =>
 {
-    IQueryable<Product> query = db.Products
+    // the include method is used to include the related data in the query in this case we are including the category and the order products
+    // the ToListAsync method is used to return a list of products
+    List<Product> products = await db.Products
         .Include(p => p.Category)
-        .Include(p => p.OrderProducts);
-
-    if (!string.IsNullOrEmpty(search))
-    {
-        search = search.ToLower();
-        query = query.Where(p => p.ProductName.ToLower().Contains(search) || 
-                                p.Brand.ToLower().Contains(search) ||
-                                p.Category.CategoryName.ToLower().Contains(search));
-    }
-
-    return await query.ToListAsync();
+        .Include(p => p.OrderProducts)
+        .ToListAsync();
+    // Return the products with the status code 20
+    return Results.Ok(products);
 });
-
+// Create a new product using the POST method using the Product model as the request body and db as the database context
+// The Product model is the data that we are sending to the endpoint and the db is the database context that we are using to save the data   
 app.MapPost("/products", async (CornerStoreDbContext db, Product product) =>
 {
+    // Add new product
     db.Products.Add(product);
+    // Save the changes to the database using the async method
+    // The await keyword is used to wait for the SaveChangesAsync method to complete before returning the results
     await db.SaveChangesAsync();
+    // The $"/products/{product.Id}" is the URL of the created product
+    // The Results.Created method takes two arguments, the first is the URL of the created product and the second is the data that we are sending to the endpoint and the status code 201   
     return Results.Created($"/products/{product.Id}", product);
 });
-
+// Update a product using the PUT method using the Product model as the request body and db as the database context
+// The Product model is the data that we are sending to the endpoint and the db is the database context that we are using to save the data   
 app.MapPut("/products/{id}", async (CornerStoreDbContext db, int id, Product product) =>
 {
+    // Check if IDs match, the id is the id of the product that we are updating and the product.Id is the id of the product that we are sending to the endpoint
+    // If the IDs don't match, return the status code 400
     if (id != product.Id)
     {
-        return Results.BadRequest();
+        return Results.BadRequest("URL id does not match product id");
     }
+    // Find the existing product, the ? operator is used to return null if the product doesn't exist 
+    // the include method is used to include the related data in the query in this case we are including the category
+    // the FirstOrDefaultAsync method is used to return the first product that matches the id
+    Product? existingProduct = await db.Products
+        .Include(p => p.Category)
+        .FirstOrDefaultAsync(p => p.Id == id);
 
-    db.Entry(product).State = EntityState.Modified;
+    // If product doesn't exist, return 404
+    if (existingProduct == null)
+    {
+        return Results.NotFound($"Product with ID {id} not found");
+    }
+    // Update the existing product properties
+    // The ProductName property is updated with the value from the product that we are sending to the endpoint
+    existingProduct.ProductName = product.ProductName;
+    // The Brand property is updated with the value from the product that we are sending to the endpoint
+    existingProduct.Brand = product.Brand;
+    // The Price property is updated with the value from the product that we are sending to the endpoint
+    existingProduct.Price = product.Price;
+    // The CategoryId property is updated with the value from the product that we are sending to the endpoint
+    existingProduct.CategoryId = product.CategoryId;
+    // Save the changes to the database using the async method
+    // The await keyword is used to wait for the SaveChangesAsync method to complete before returning the results       
     await db.SaveChangesAsync();
+    // Return the status code 204 if the product is updated
+    // The NoContent method is used to return the status code 204
     return Results.NoContent();
 });
-
-// Order Endpoints
+// Order Endpoints, these are the endpoints for the order model and its related data
+// Get all orders with their related data, the orderDate parameter is optional and is used to filter the orders by the order date   
+// The orderDate parameter is a string that is used to filter the orders by the order date
 app.MapGet("/orders", async (CornerStoreDbContext db, string? orderDate) =>
 {
-    IQueryable<Order> query = db.Orders
+    // Get all orders with their related data, the ? operator is used to return null if the order doesn't exist 
+    // the include method is used to include the related data in the query in this case we are including the order products and the cashier
+    List<Order> orders = await db.Orders
         .Include(o => o.OrderProducts)
             .ThenInclude(op => op.Product)
-        .Include(o => o.Cashier);
+        .Include(o => o.Cashier)
+        .ToListAsync();
 
+    // If date provided, filter orders by that date
+    // The string.IsNullOrEmpty method is used to check if the orderDate is null or empty
     if (!string.IsNullOrEmpty(orderDate) && DateTime.TryParse(orderDate, out DateTime date))
+    // The DateTime.TryParse method is used to parse the orderDate to a DateTime object
+    // The out keyword is used to pass the parsed DateTime object to the date variable
     {
-        query = query.Where(o => o.PaidOnDate.Date == date.Date);
+        orders = orders
+            .Where(o => o.PaidOnDate.Date == date.Date)
+    // The Where method is used to filter the orders by the order date
+    // The ToList method is used to return a list of orders
+            .ToList();
     }
-
-    return await query.ToListAsync();
+    // Return the orders with the status code 200
+    // The Ok method is used to return the orders with the status code 200
+    return Results.Ok(orders);
 });
-
+// Get a specific order with its related data, the id parameter is the id of the order that we are getting 
 app.MapGet("/orders/{id}", async (CornerStoreDbContext db, int id) =>
 {
-    var order = await db.Orders
+    // Get specific order with all related data, the ? operator is used to return null if the order doesn't exist 
+    Order? order = await db.Orders
+    // the include method is used to include the related data in the query in this case we are including the order products and the cashier
+        // the FirstOrDefaultAsync method is used to return the first order that matches the id
         .Include(o => o.OrderProducts)
+            // the ThenInclude method is used to include the related data in the query. In this case we are including the product due to the relationship between the order product and the product
             .ThenInclude(op => op.Product)
         .Include(o => o.Cashier)
         .FirstOrDefaultAsync(o => o.Id == id);
 
+    // Return NotFound if order doesn't exist
     if (order == null)
-    {
+    {   
+        // Return the status code 404 if the order doesn't exist
         return Results.NotFound();
     }
-
+    // Return the order with the status code 200
     return Results.Ok(order);
 });
-
+// Create a new order using the POST method using the Order model as the request body and db as the database context
+// The Order model is the data that we are sending to the endpoint and the db is the database context that we are using to save the data       
 app.MapPost("/orders", async (CornerStoreDbContext db, Order order) =>
 {
-    // Load and attach products for each order product
-    foreach (var orderProduct in order.OrderProducts)
+    // Create list of order products with existing products 
+    List<OrderProduct> orderProducts = new();
+    // Iterate over the order products
+    foreach (OrderProduct orderProduct in order.OrderProducts)
     {
-        var product = await db.Products.FindAsync(orderProduct.ProductId);
+        Product? product = await db.Products.FindAsync(orderProduct.ProductId);
+        // If the product exists, add it to the order products list
         if (product != null)
         {
-            orderProduct.Product = product;
-            db.Entry(product).State = EntityState.Unchanged;
+            // Add the product to the order products list
+                orderProducts.Add(new OrderProduct 
+                // The ProductId property is updated with the value from the product that we are sending to the endpoint    
+                // The Quantity property is updated with the value from the order product that we are sending to the endpoint
+                { 
+                    ProductId = product.Id,
+                    Quantity = orderProduct.Quantity
+                });
         }
     }
 
-    db.Orders.Add(order);
+    // Step 2: Create and save new order
+    Order newOrder = new()
+    {
+        CashierId = order.CashierId,
+        PaidOnDate = order.PaidOnDate,
+        OrderProducts = orderProducts
+    };
+
+    db.Orders.Add(newOrder);
     await db.SaveChangesAsync();
 
-    // Reload the order with all related data
-    var savedOrder = await db.Orders
+    // Step 3: Return the complete order
+    Order? savedOrder = await db.Orders
         .Include(o => o.OrderProducts)
             .ThenInclude(op => op.Product)
         .Include(o => o.Cashier)
-        .FirstOrDefaultAsync(o => o.Id == order.Id);
+        .FirstOrDefaultAsync(o => o.Id == newOrder.Id);
 
-    return Results.Created($"/orders/{order.Id}", savedOrder);
+    // The Results.Created method takes two arguments, the first is the URL of the created order and the second is the data that we are sending to the endpoint and the status code 201 
+    return Results.Created($"/orders/{newOrder.Id}", savedOrder);
 });
-
+// Delete an order using the DELETE method using the id parameter as the id of the order that we are deleting
 app.MapDelete("/orders/{id}", async (CornerStoreDbContext db, int id) =>
 {
-    var order = await db.Orders.FindAsync(id);
+    // Find the order, the ? operator is used to return null if the order doesn't exist 
+    // the FindAsync method is used to return the first order that matches the id
+    Order? order = await db.Orders.FindAsync(id);
+    
+    // Return NotFound if order doesn't exist
     if (order == null)
     {
+        // Return the status code 404 if the order doesn't exist
         return Results.NotFound();
     }
 
+    // Remove the order
     db.Orders.Remove(order);
+    // Save the changes to the database using the async method
+    // The await keyword is used to wait for the SaveChangesAsync method to complete before returning the results
     await db.SaveChangesAsync();
+    // The NoContent method is used to return the status code 204
     return Results.NoContent();
 });
 
