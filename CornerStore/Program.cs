@@ -68,15 +68,24 @@ app.MapPost("/cashiers", async (CornerStoreDbContext db, Cashier cashier) =>
 });
 
 // Product Endpoints, these are the endpoints for the product model and its related data    
-app.MapGet("/products", async (CornerStoreDbContext db) =>
+app.MapGet("/products", async (CornerStoreDbContext db, string? search) =>
 {
-    // the include method is used to include the related data in the query in this case we are including the category and the order products
-    // the ToListAsync method is used to return a list of products
-    List<Product> products = await db.Products
+    var products = await db.Products
         .Include(p => p.Category)
         .Include(p => p.OrderProducts)
         .ToListAsync();
-    // Return the products with the status code 20
+
+    // If search term provided, filter the results
+    if (!string.IsNullOrEmpty(search))
+    {
+        products = products
+            .Where(p => 
+                p.ProductName.Contains(search, StringComparison.OrdinalIgnoreCase) || 
+                p.Brand.Contains(search, StringComparison.OrdinalIgnoreCase) ||
+                p.Category.CategoryName.Contains(search, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+    }
+
     return Results.Ok(products);
 });
 // Create a new product using the POST method using the Product model as the request body and db as the database context
@@ -223,7 +232,7 @@ app.MapPost("/orders", async (CornerStoreDbContext db, Order order) =>
         .Include(o => o.Cashier)
         .FirstOrDefaultAsync(o => o.Id == newOrder.Id);
 
-    // The Results.Created method takes two arguments, the first is the URL of the created order and the second is the data that we are sending to the endpoint and the status code 201 
+    // The Results.Created method takes two arguments, the first is the URL of the created order and the second is the data that we are sending to the endpoint
     return Results.Created($"/orders/{newOrder.Id}", savedOrder);
 });
 // Delete an order using the DELETE method using the id parameter as the id of the order that we are deleting
