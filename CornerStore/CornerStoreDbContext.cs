@@ -8,8 +8,9 @@ public class CornerStoreDbContext : DbContext
     public DbSet<Product> Products { get; set; }
     public DbSet<Order> Orders { get; set; }
     public DbSet<OrderProduct> OrderProducts { get; set; }
-    // Constructor for the CornerStoreDbContext class is used for dependency injection and database connection
-    public CornerStoreDbContext(DbContextOptions<CornerStoreDbContext> context) : base(context)
+
+    public CornerStoreDbContext(DbContextOptions<CornerStoreDbContext> options)
+        : base(options)
     {
     }
 
@@ -39,6 +40,22 @@ public class CornerStoreDbContext : DbContext
             .HasOne(o => o.Cashier)
             .WithMany(c => c.Orders)
             .HasForeignKey(o => o.CashierId);
+
+        // Add sample data
+        modelBuilder.Entity<Cashier>().HasData(
+            new Cashier { Id = 1, FirstName = "Amy", LastName = "Simpson" },
+            new Cashier { Id = 2, FirstName = "Derek", LastName = "Masters" }
+        );
+
+        modelBuilder.Entity<Category>().HasData(
+            new Category { Id = 1, CategoryName = "Food" },
+            new Category { Id = 2, CategoryName = "Cleaning" }
+        );
+
+        modelBuilder.Entity<Product>().HasData(
+            new Product { Id = 1, ProductName = "Tuna", Brand = "Bumble Bee", Price = 1.25M, CategoryId = 1 },
+            new Product { Id = 2, ProductName = "Toilet Paper", Brand = "Scott", Price = 5.00M, CategoryId = 2 }
+        );
     }
 }
 
