@@ -2,7 +2,7 @@ using CornerStore.Models;
 using Microsoft.EntityFrameworkCore;
 using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Http.Json;
-using Microsoft.EntityFrameworkCore.InMemory;
+using CornerStore.Models.DTOs;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -64,9 +64,13 @@ app.MapPost("/cashiers", async (CornerStoreDbContext db, Cashier cashier) =>
     // Save the changes to the database using the async method
     // The await keyword is used to wait for the SaveChangesAsync method to complete before returning the results
     await db.SaveChangesAsync();
+    Cashier savedCashier = await db.Cashiers
+        .Where(c => c.Id == cashier.Id)
+        .Include(c => c.Orders)
+        .FirstOrDefaultAsync();
     // The Created method is used to return the created cashier with the status code 201
     // The Results.Created method takes two arguments, the first is the URL of the created cashier and the second is the data that we are sending to the endpoint
-    return Results.Created($"/cashiers/{cashier.Id}", cashier);
+    return Results.Created($"/cashiers/{cashier.Id}", savedCashier.ToDTO());
 });
 
 // Product Endpoints, these are the endpoints for the product model and its related data    
@@ -88,7 +92,7 @@ app.MapGet("/products", async (CornerStoreDbContext db, string? search) =>
             .ToList();
     }
 
-    return Results.Ok(products);
+    return Results.Ok(products.Select(p => p.ToDTO()));
 });
 // Create a new product using the POST method using the Product model as the request body and db as the database context
 // The Product model is the data that we are sending to the endpoint and the db is the database context that we are using to save the data   
@@ -99,9 +103,16 @@ app.MapPost("/products", async (CornerStoreDbContext db, Product product) =>
     // Save the changes to the database using the async method
     // The await keyword is used to wait for the SaveChangesAsync method to complete before returning the results
     await db.SaveChangesAsync();
+    
+    // Load the category before converting to DTO
+    Product savedProduct = await db.Products
+        .Where(p => p.Id == product.Id)
+        .Include(p => p.Category)
+        .FirstOrDefaultAsync();
     // The $"/products/{product.Id}" is the URL of the created product
     // The Results.Created method takes two arguments, the first is the URL of the created product and the second is the data that we are sending to the endpoint and the status code 201   
-    return Results.Created($"/products/{product.Id}", product);
+    //return Results.Created($"/products/{product.Id}", product);
+    return Results.Created($"/products/{product.Id}", savedProduct.ToDTO());
 });
 // Update a product using the PUT method using the Product model as the request body and db as the database context
 // The Product model is the data that we are sending to the endpoint and the db is the database context that we are using to save the data   
@@ -168,7 +179,8 @@ app.MapGet("/orders", async (CornerStoreDbContext db, string? orderDate) =>
     }
     // Return the orders with the status code 200
     // The Ok method is used to return the orders with the status code 200
-    return Results.Ok(orders);
+    return Results.Ok(orders.Select(o => o.ToDTO()));
+    // The Select method is used to return a list of orders with the ToDTO method applied to each order
 });
 // Get a specific order with its related data, the id parameter is the id of the order that we are getting 
 app.MapGet("/orders/{id}", async (CornerStoreDbContext db, int id) =>
@@ -196,27 +208,21 @@ app.MapGet("/orders/{id}", async (CornerStoreDbContext db, int id) =>
 // The Order model is the data that we are sending to the endpoint and the db is the database context that we are using to save the data       
 app.MapPost("/orders", async (CornerStoreDbContext db, Order order) =>
 {
-    // Create list of order products with existing products 
     List<OrderProduct> orderProducts = new();
-    // Iterate over the order products
     foreach (OrderProduct orderProduct in order.OrderProducts)
     {
         Product? product = await db.Products.FindAsync(orderProduct.ProductId);
-        // If the product exists, add it to the order products list
         if (product != null)
         {
-            // Add the product to the order products list
-                orderProducts.Add(new OrderProduct 
-                // The ProductId property is updated with the value from the product that we are sending to the endpoint    
-                // The Quantity property is updated with the value from the order product that we are sending to the endpoint
-                { 
-                    ProductId = product.Id,
-                    Quantity = orderProduct.Quantity
-                });
+            orderProducts.Add(new OrderProduct 
+            { 
+                ProductId = product.Id,
+                Product = product,
+                Quantity = orderProduct.Quantity
+            });
         }
     }
 
-    // Step 2: Create and save new order
     Order newOrder = new()
     {
         CashierId = order.CashierId,
@@ -227,14 +233,12 @@ app.MapPost("/orders", async (CornerStoreDbContext db, Order order) =>
     db.Orders.Add(newOrder);
     await db.SaveChangesAsync();
 
-    // Step 3: Return the complete order
     Order? savedOrder = await db.Orders
         .Include(o => o.OrderProducts)
             .ThenInclude(op => op.Product)
         .Include(o => o.Cashier)
         .FirstOrDefaultAsync(o => o.Id == newOrder.Id);
 
-    // The Results.Created method takes two arguments, the first is the URL of the created order and the second is the data that we are sending to the endpoint
     return Results.Created($"/orders/{newOrder.Id}", savedOrder);
 });
 // Delete an order using the DELETE method using the id parameter as the id of the order that we are deleting

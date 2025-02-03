@@ -9,7 +9,7 @@ public class Order
     public int Id { get; set; }
     
     [ForeignKey("Cashier")]
-    public int CashierId { get; set; }
+    public int CashierId { get; set; } 
     public Cashier Cashier { get; set; }
     
     //data type for the date and time
@@ -26,11 +26,23 @@ public class Order
     {
         get
         {
-            if (OrderProducts == null) return 0M;
+            if (OrderProducts == null)
+            {
+                Console.WriteLine("OrderProducts is null");
+                return 0M;
+            }
             
-            return OrderProducts
+            var total = OrderProducts
                 .Where(op => op.Product != null)
-                .Sum(op => op.Product.Price * op.Quantity);
+                .Sum(op => 
+                {
+                    var subtotal = op.Product.Price * op.Quantity;
+                    Console.WriteLine($"Product: {op.Product.ProductName}, Price: {op.Product.Price}, Quantity: {op.Quantity}, Subtotal: {subtotal}");
+                    return subtotal;
+                });
+            
+            Console.WriteLine($"Final Total: {total}");
+            return total;
         }
     }
 }
